@@ -1,0 +1,6 @@
+{
+  "name": "Cloudy",
+  "description": "Cloudy — Minimalist Multi-AI Platform featuring 2.0 Breeze, 1.1 Neo, 1.0 Pro, Vision & Code, Universal Natural Voice Live, Multi-User Cloud Workspace, Live Integrations, 18+ Country/System Locales, and 3 Themes (White Free, Ice Crystal Pro, Dark Free)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,212 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidModelId(modelId) {
+      return modelId is string &&
+             modelId.size() >= 2 &&
+             modelId.size() <= 80 &&
+             modelId.matches('^[a-zA-Z0-9._:\\-/]+$');
+    }
+
+    function isValidProfileSettings(data, userId) {
+      return data.userId == userId &&
+             data.themeMode in ['SYSTEM', 'LIGHT_WHITE', 'ICE_CRYSTAL_PRO', 'DARK_OBSIDIAN'] &&
+             data.proUnlocked is bool &&
+             data.preferredLanguageCode is string && data.preferredLanguageCode.size() >= 2 && data.preferredLanguageCode.size() <= 12 &&
+             data.countryCode is string && data.countryCode.size() >= 2 && data.countryCode.size() <= 8 &&
+             isValidModelId(data.defaultModelId) &&
+             (!('voiceProfileId' in data) || (data.voiceProfileId is string && data.voiceProfileId.size() <= 40)) &&
+             (!('subscriptionTier' in data) || data.subscriptionTier in ['FREE', 'PRO', 'ULTRA']) &&
+             (!('autoRouteEnabled' in data) || data.autoRouteEnabled is bool) &&
+             (!('responseStyle' in data) || data.responseStyle in ['CONCISE', 'BALANCED', 'DETAILED']) &&
+             (!('customInstructions' in data) || (data.customInstructions is string && data.customInstructions.size() <= 2000)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidIntegration(data, userId) {
+      return data.userId == userId &&
+             data.type in ['webhook', 'github_repo', 'web_feed', 'fastapi_node', 'cloud_vault', 'voice_tts'] &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.targetUrl is string && data.targetUrl.size() <= 500 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+             data.enabled is bool &&
+             (!('lastStatus' in data) || (data.lastStatus is string && data.lastStatus.size() <= 300)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidConversationThread(data, userId) {
+      return data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             isValidModelId(data.activeModelId) &&
+             data.pinned is bool &&
+             data.messageCount is int && data.messageCount >= 0 && data.messageCount <= 100000 &&
+             (!('lastPreview' in data) || (data.lastPreview is string && data.lastPreview.size() <= 300)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCloudMessage(data, userId) {
+      return data.userId == userId &&
+             data.role in ['user', 'assistant'] &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 32000 &&
+             data.modelLabel is string && data.modelLabel.size() >= 1 && data.modelLabel.size() <= 80 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 12 &&
+             data.verificationStatus is string && data.verificationStatus.size() >= 2 && data.verificationStatus.size() <= 60 &&
+             data.latencyMs is int && data.latencyMs >= 0 && data.latencyMs <= 600000 &&
+             data.starred is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidMemoryCategory(category) {
+      return category in ['knowledge', 'prompt_template', 'preference', 'code_snippet'];
+    }
+
+    function isValidCloudMemoryItem(data, userId) {
+      return data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+             isValidMemoryCategory(data.category) &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 12000 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 12 &&
+             data.pinned is bool &&
+             data.tags is list && data.tags.size() <= 8 &&
+             (data.tags.size() == 0 || data.tags[0] is string) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 0. Per-User Private Profile & Preferences
+    match /users/{userId}/profile/{profileId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(profileId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       incoming().keys().hasAll(['userId', 'themeMode', 'proUnlocked', 'preferredLanguageCode', 'countryCode', 'defaultModelId', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'themeMode', 'proUnlocked', 'preferredLanguageCode', 'countryCode', 'defaultModelId', 'voiceProfileId', 'subscriptionTier', 'autoRouteEnabled', 'responseStyle', 'customInstructions', 'updatedAt']) &&
+                       isValidProfileSettings(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       incoming().userId == existing().userId &&
+                       isValidProfileSettings(incoming(), userId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['themeMode', 'proUnlocked', 'preferredLanguageCode', 'countryCode', 'defaultModelId', 'voiceProfileId', 'subscriptionTier', 'autoRouteEnabled', 'responseStyle', 'customInstructions', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(profileId);
+    }
+
+    // 0b. Per-User Private Integrations
+    match /users/{userId}/integrations/{integrationId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(integrationId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(integrationId) &&
+                       incoming().keys().hasAll(['userId', 'type', 'name', 'targetUrl', 'enabled', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'type', 'name', 'targetUrl', 'notes', 'enabled', 'lastStatus', 'createdAt', 'updatedAt']) &&
+                       isValidIntegration(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(integrationId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidIntegration(incoming(), userId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'targetUrl', 'notes', 'enabled', 'lastStatus', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(integrationId);
+    }
+
+    // 1. User Conversations Subcollection
+    match /users/{userId}/conversations/{conversationId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(conversationId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(conversationId) &&
+                       incoming().keys().hasAll(['userId', 'title', 'activeModelId', 'pinned', 'messageCount', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'title', 'activeModelId', 'pinned', 'messageCount', 'lastPreview', 'createdAt', 'updatedAt']) &&
+                       isValidConversationThread(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(conversationId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidConversationThread(incoming(), userId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'activeModelId', 'pinned', 'messageCount', 'lastPreview', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(conversationId);
+
+      // 2. Messages Subcollection under Conversation
+      match /messages/{messageId} {
+        allow list: if isOwner(userId) && isValidId(conversationId);
+        allow get: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(conversationId) &&
+                         isValidId(messageId) &&
+                         exists(/databases/$(database)/documents/users/$(userId)/conversations/$(conversationId)) &&
+                         incoming().keys().hasAll(['userId', 'role', 'content', 'modelLabel', 'languageCode', 'verificationStatus', 'latencyMs', 'starred', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'role', 'content', 'modelLabel', 'languageCode', 'verificationStatus', 'latencyMs', 'starred', 'createdAt']) &&
+                         isValidCloudMessage(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(conversationId) &&
+                         isValidId(messageId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidCloudMessage(incoming(), userId) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['starred', 'content', 'modelLabel', 'verificationStatus', 'latencyMs']);
+
+        allow delete: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId);
+      }
+    }
+
+    // 3. User Cloud Memory & Knowledge Vault
+    match /users/{userId}/memories/{memoryId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(memoryId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(memoryId) &&
+                       incoming().keys().hasAll(['userId', 'title', 'category', 'content', 'languageCode', 'pinned', 'tags', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'title', 'category', 'content', 'languageCode', 'pinned', 'tags', 'createdAt', 'updatedAt']) &&
+                       isValidCloudMemoryItem(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(memoryId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidCloudMemoryItem(incoming(), userId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'content', 'languageCode', 'pinned', 'tags', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(memoryId);
+    }
+  }
+}

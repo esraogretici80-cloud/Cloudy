@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "UserProfileSettings": {
+      "title": "UserProfileSettings",
+      "description": "Per-user private preferences, theme, country/locale, personalization, and default model configuration.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "themeMode": { "type": "string", "enum": ["SYSTEM", "LIGHT_WHITE", "ICE_CRYSTAL_PRO", "DARK_OBSIDIAN"] },
+        "proUnlocked": { "type": "boolean", "description": "Whether Ice Crystal Pro theme is activated" },
+        "preferredLanguageCode": { "type": "string", "description": "system, auto, or ISO language code" },
+        "countryCode": { "type": "string", "description": "ISO country code (e.g. TR, US, DE, JP)" },
+        "defaultModelId": { "type": "string", "description": "Default Cloudy or external AI model ID" },
+        "voiceProfileId": { "type": "string", "description": "Natural universal studio voice persona ID" },
+        "subscriptionTier": { "type": "string", "enum": ["FREE", "PRO", "ULTRA"], "description": "User subscription plan tier" },
+        "autoRouteEnabled": { "type": "boolean", "description": "Whether explainable auto model routing is enabled" },
+        "responseStyle": { "type": "string", "enum": ["CONCISE", "BALANCED", "DETAILED"], "description": "Preferred AI response verbosity" },
+        "customInstructions": { "type": "string", "description": "Optional user-authored system guidance" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update" }
+      },
+      "required": ["userId", "themeMode", "proUnlocked", "preferredLanguageCode", "countryCode", "defaultModelId", "updatedAt"]
+    },
+    "UserIntegration": {
+      "title": "UserIntegration",
+      "description": "Per-user private integration connector (Webhook, GitHub Repo, Web/RSS Feed, FastAPI, Voice TTS).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "type": { "type": "string", "enum": ["webhook", "github_repo", "web_feed", "fastapi_node", "cloud_vault", "voice_tts"] },
+        "name": { "type": "string", "description": "User-friendly integration name" },
+        "targetUrl": { "type": "string", "description": "Endpoint URL, repo slug (owner/repo), or feed URL" },
+        "notes": { "type": "string", "description": "Optional header or description" },
+        "enabled": { "type": "boolean", "description": "Whether the integration is active" },
+        "lastStatus": { "type": "string", "description": "Latest execution or sync status" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "name", "targetUrl", "enabled", "createdAt", "updatedAt"]
+    },
+    "ConversationThread": {
+      "title": "ConversationThread",
+      "description": "A persistent AI workspace conversation thread owned by a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "title": { "type": "string", "description": "Workspace thread title" },
+        "activeModelId": { "type": "string", "description": "Active Cloudy or multi-provider model identifier" },
+        "pinned": { "type": "boolean", "description": "Whether the thread is pinned" },
+        "messageCount": { "type": "integer", "description": "Total messages in thread" },
+        "lastPreview": { "type": "string", "description": "Short preview of latest message" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update" }
+      },
+      "required": ["userId", "title", "activeModelId", "pinned", "messageCount", "createdAt", "updatedAt"]
+    },
+    "CloudMessage": {
+      "title": "CloudMessage",
+      "description": "A single prompt or Multi-AI response stored under a conversation thread.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string", "description": "Message text content" },
+        "modelLabel": { "type": "string", "description": "Model name used (e.g. Cloudy 1.1 Neo)" },
+        "languageCode": { "type": "string", "description": "Detected or preferred ISO language code" },
+        "verificationStatus": { "type": "string", "description": "Verification status enum string" },
+        "latencyMs": { "type": "integer", "description": "Response latency in milliseconds" },
+        "starred": { "type": "boolean", "description": "Bookmarked by user" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "role", "content", "modelLabel", "languageCode", "verificationStatus", "latencyMs", "starred", "createdAt"]
+    },
+    "CloudMemoryItem": {
+      "title": "CloudMemoryItem",
+      "description": "User-authored knowledge base entry, prompt template, or persistent memory.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "title": { "type": "string", "description": "Memory item title" },
+        "category": {
+          "type": "string",
+          "enum": ["knowledge", "prompt_template", "preference", "code_snippet"]
+        },
+        "content": { "type": "string", "description": "Detailed body content" },
+        "languageCode": { "type": "string", "description": "Language code of the memory" },
+        "pinned": { "type": "boolean", "description": "Whether pinned for priority context" },
+        "tags": { "type": "array", "description": "Up to 8 short search tags" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update" }
+      },
+      "required": ["userId", "title", "category", "content", "languageCode", "pinned", "tags", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/profile/{profileId}": {
+      "schema": { "$ref": "#/entities/UserProfileSettings" },
+      "description": "Per-user isolated theme, region, personalization, and model preferences"
+    },
+    "/users/{userId}/integrations/{integrationId}": {
+      "schema": { "$ref": "#/entities/UserIntegration" },
+      "description": "Per-user isolated external integrations and connectors"
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/ConversationThread" },
+      "description": "Per-user AI conversation threads"
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/CloudMessage" },
+      "description": "Messages belonging to a user's conversation thread"
+    },
+    "/users/{userId}/memories/{memoryId}": {
+      "schema": { "$ref": "#/entities/CloudMemoryItem" },
+      "description": "Per-user cloud knowledge & prompt template vault"
+    }
+  }
+}
